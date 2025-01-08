@@ -177,9 +177,7 @@ class ALNS:
         """
         return list(self._r_ops.items())
 
-    def add_destroy_operator(
-        self, op: _OperatorType, name: Optional[str] = None
-    ):
+    def add_destroy_operator(self, op: _OperatorType, name: Optional[str] = None):
         """
         Adds a destroy operator to the heuristic instance.
 
@@ -203,9 +201,7 @@ class ALNS:
         logger.debug(f"Adding destroy operator {op.__name__}.")
         self._d_ops[op.__name__ if name is None else name] = op
 
-    def add_repair_operator(
-        self, op: _OperatorType, name: Optional[str] = None
-    ):
+    def add_repair_operator(self, op: _OperatorType, name: Optional[str] = None):
         """
         Adds a repair operator to the heuristic instance.
 
@@ -289,13 +285,11 @@ class ALNS:
         # added by me
         iteration = 0
         d_operators_log = np.zeros(
-            shape=(stop._max_iterations, len(self.destroy_operators) + 1),
-            dtype=int,
+            shape=(stop._max_iterations, len(self.destroy_operators) +1), dtype=int
         )
         d_operators_log[0, :] = 0
         r_operators_log = np.zeros(
-            shape=(stop._max_iterations, len(self.repair_operators) + 1),
-            dtype=int,
+            shape=(stop._max_iterations, len(self.repair_operators) +1), dtype=int
         )
         r_operators_log[0, :] = 0
 
@@ -315,12 +309,8 @@ class ALNS:
             cand = r_operator(destroyed, self._rng, **kwargs)
             n_served_customers3 = cand.n_served_customers()
             # added by me
-            d_operators_log[iteration, d_idx] += (
-                n_served_customers1 - n_served_customers2
-            )
-            r_operators_log[iteration, r_idx] += (
-                n_served_customers3 - n_served_customers2
-            )
+            d_operators_log[iteration, d_idx] += n_served_customers1 - n_served_customers2
+            r_operators_log[iteration, r_idx] += n_served_customers3 - n_served_customers2
 
             # logger.debug(f"Iteration {iteration}: Destroy operator {d_name} removed {n_served_customers1-n_served_customers2} customers.")
             # logger.debug(
@@ -418,9 +408,7 @@ class ALNS:
         if outcome == Outcome.BEST:
             if save:
                 logger.debug(f"Iteration {iteration} is new best")
-                plot_solution(
-                    data, best, f"solution_{iteration:04d}.png", save=True
-                )
+                plot_solution(data, best, f"solution_{iteration:04d}.png", save=True)
             return cand, cand, outcome
 
         if outcome == Outcome.REJECT:
