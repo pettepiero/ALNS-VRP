@@ -1,11 +1,11 @@
 import logging
 import time
 import os
+from datetime import datetime
 from typing import Dict, List, Optional, Protocol, Tuple
 
 import numpy.random as rnd
 import numpy as np
-import matplotlib.pyplot as plt
 
 from alns.Outcome import Outcome
 from alns.Result import Result
@@ -14,67 +14,7 @@ from alns.Statistics import Statistics
 from alns.accept import AcceptanceCriterion
 from alns.select import OperatorSelectionScheme
 from alns.stop import StoppingCriterion
-
-
-def plot_solution(
-    data,
-    solution,
-    name="CVRP solution",
-    idx_annotations=True,
-    figsize=(12, 10),
-    save=False,
-):
-    """
-    Plot the routes of the passed-in solution.
-    """
-    fig, ax = plt.subplots(figsize=figsize)
-    cmap = plt.get_cmap("Set2", data["vehicles"])
-    cmap
-
-    for idx, route in enumerate(solution.routes):
-        ax.plot(
-            [data["node_coord"][loc][0] for loc in route.customers_list],
-            [data["node_coord"][loc][1] for loc in route.customers_list],
-            color=cmap(idx),
-            marker=".",
-            label=f"Vehicle {idx}",
-        )
-
-    for i in range(1, data["dimension"]):
-        customer = data["node_coord"][i]
-        ax.plot(customer[0], customer[1], "o", c="tab:blue")
-        if idx_annotations:
-            ax.annotate(i, (customer[0], customer[1]))
-
-    # for idx, customer in enumerate(data["node_coord"][:data["dimension"]]):
-    #     ax.plot(customer[0], customer[1], "o", c="tab:blue")
-    #     ax.annotate(idx, (customer[0], customer[1]))
-
-    # Plot the depot
-    kwargs = dict(zorder=3, marker="X")
-
-    for i in range(data["dimension"], data["dimension"] + data["n_depots"]):
-        depot = data["node_coord"][i]
-        ax.plot(depot[0], depot[1], c="tab:red", **kwargs, label=f"Depot {i}")
-        if idx_annotations:
-            ax.annotate(i, (depot[0], depot[1]))
-
-    # for idx, depot in enumerate(data["depots"]):
-    #     ax.scatter(*data["node_coord"][depot], label=f"Depot {depot}", c=cmap(idx), **kwargs)
-    #     ax.annotate(idx, (data["node_coord"][depot][0], data["node_coord"][depot][1]))
-
-    ax.scatter(*data["node_coord"][0], c="tab:red", label="Depot 0", **kwargs)
-
-    ax.set_title(
-        f"{name}\n Total distance: {solution.cost},\n Total unassigned: {len(solution.unassigned)}"
-    )
-    ax.set_xlabel("X-coordinate")
-    ax.set_ylabel("Y-coordinate")
-    ax.legend(frameon=False, ncol=3)
-
-    if save:
-        plt.savefig(f"./plots/{name}")
-        plt.close()
+from alns.My_plot import plot_solution
 
 
 class _OperatorType(Protocol):
@@ -142,15 +82,6 @@ class ALNS:
         # Registers callback for each possible evaluation outcome.
         self._on_outcome: Dict[Outcome, _CallbackType] = {}
 
-        # DEBUG: create screenshots directory if it deosn't exist. Empty it if it does.
-        self.screenshots_folder_name = "insertion_screenshots"
-        self.screenshots_folder = f"./plots/{self.screenshots_folder_name}"
-        if not os.path.exists(self.screenshots_folder):
-            os.makedirs(self.screenshots_folder)
-        else:
-            for file in os.listdir(self.screenshots_folder):
-                os.remove(f"{self.screenshots_folder}/{file}")
-
     @property
     def destroy_operators(self) -> List[Tuple[str, _OperatorType]]:
         """
@@ -177,7 +108,9 @@ class ALNS:
         """
         return list(self._r_ops.items())
 
-    def add_destroy_operator(self, op: _OperatorType, name: Optional[str] = None):
+    def add_destroy_operator(
+        self, op: _OperatorType, name: Optional[str] = None
+    ):
         """
         Adds a destroy operator to the heuristic instance.
 
@@ -201,7 +134,9 @@ class ALNS:
         logger.debug(f"Adding destroy operator {op.__name__}.")
         self._d_ops[op.__name__ if name is None else name] = op
 
-    def add_repair_operator(self, op: _OperatorType, name: Optional[str] = None):
+    def add_repair_operator(
+        self, op: _OperatorType, name: Optional[str] = None
+    ):
         """
         Adds a repair operator to the heuristic instance.
 
@@ -225,6 +160,8 @@ class ALNS:
         accept: AcceptanceCriterion,
         stop: StoppingCriterion,
         data: dict = None,
+        save_plots: bool = False,
+        printdir: str = "./plots",
         **kwargs,
     ) -> tuple:
         """
@@ -285,13 +222,25 @@ class ALNS:
         # added by me
         iteration = 0
         d_operators_log = np.zeros(
-            shape=(stop._max_iterations, len(self.destroy_operators) +1), dtype=int
+            shape=(stop._max_iterations, len(self.destroy_operators) + 1),
+            dtype=int,
         )
         d_operators_log[0, :] = 0
         r_operators_log = np.zeros(
-            shape=(stop._max_iterations, len(self.repair_operators) +1), dtype=int
+            shape=(stop._max_iterations, len(self.repair_operators) + 1),
+            dtype=int,
         )
         r_operators_log[0, :] = 0
+
+        # set up plot directory
+        if save_plots:
+            logger.debug(f"\nsave_plots is True\n")
+            if not os.path.exists(printdir):
+                os.makedirs(printdir)
+            id = datetime.now().strftime("%Y%m%d%H%M%S")
+            plots_folder = f"{printdir}/{id}"
+            os.makedirs(plots_folder)
+            print(f"Saving plots to folder {plots_folder}")
 
         while not stop(self._rng, best, curr):
             d_idx, r_idx = op_select(self._rng, best, curr)
@@ -309,8 +258,12 @@ class ALNS:
             cand = r_operator(destroyed, self._rng, **kwargs)
             n_served_customers3 = cand.n_served_customers()
             # added by me
-            d_operators_log[iteration, d_idx] += n_served_customers1 - n_served_customers2
-            r_operators_log[iteration, r_idx] += n_served_customers3 - n_served_customers2
+            d_operators_log[iteration, d_idx] += (
+                n_served_customers1 - n_served_customers2
+            )
+            r_operators_log[iteration, r_idx] += (
+                n_served_customers3 - n_served_customers2
+            )
 
             # logger.debug(f"Iteration {iteration}: Destroy operator {d_name} removed {n_served_customers1-n_served_customers2} customers.")
             # logger.debug(
@@ -336,7 +289,14 @@ class ALNS:
             stats.collect_destroy_operator(d_name, outcome)
             stats.collect_repair_operator(r_name, outcome)
             stats.collect_runtime(time.perf_counter())
-            # plot_solution(data, curr, f"solution_{iteration:04d}.png", save=True)
+            if save_plots:
+                plot_solution(
+                    data,
+                    curr,
+                    f"solution_{iteration:04d}.png",
+                    save=True,
+                    folder_name=plots_folder,
+                )
             iteration += 1
 
         logger.info(f"Finished iterating in {stats.total_runtime:.2f}s.")
@@ -408,7 +368,9 @@ class ALNS:
         if outcome == Outcome.BEST:
             if save:
                 logger.debug(f"Iteration {iteration} is new best")
-                plot_solution(data, best, f"solution_{iteration:04d}.png", save=True)
+                plot_solution(
+                    data, best, f"solution_{iteration:04d}.png", save=True
+                )
             return cand, cand, outcome
 
         if outcome == Outcome.REJECT:
