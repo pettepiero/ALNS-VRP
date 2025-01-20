@@ -2,9 +2,9 @@
 name = "alns"
 version = "7.0.0"
 description = "A flexible implementation of the adaptive large neighbourhood search (ALNS) algorithm."
-authors = ["Niels Wouda <nielswouda@gmail.com>"]
+authors = [""]
 license = "MIT"
-repository = "https://github.com/N-Wouda/ALNS"
+repository = "https://github.com/pettepiero/ALNS-VRP.git"
 include = [
     "LICENSE.md",
 ]
@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 [tool.poetry.urls]
-"Tracker" = "https://github.com/N-Wouda/ALNS/issues"
+"Tracker" = "https://github.com/pettepiero/ALNS-VRP/issues"
 
 [tool.poetry.dependencies]
 python = "^3.9, <4.0"
