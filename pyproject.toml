@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "alns"
 version = "7.0.0"
-description = "A flexible implementation of the adaptive large neighbourhood search (ALNS) algorithm."
-authors = [""]
+description = "FORK OF ALNS LIBRARY: A flexible implementation of the adaptive large neighbourhood search (ALNS) algorithm."
+authors = ["Piero Pettena <pette.piero@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/pettepiero/ALNS-VRP.git"
 include = [
