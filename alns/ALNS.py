@@ -161,7 +161,7 @@ class ALNS:
         stop: StoppingCriterion,
         data: dict = None,
         save_plots: bool = False,
-        printdir: str = "./plots",
+        printdir: str = "/home/pettepiero/tirocinio/dial-a-ride/outputs/plots",
         **kwargs,
     ) -> tuple:
         """
@@ -221,16 +221,19 @@ class ALNS:
         stats.collect_runtime(time.perf_counter())
         # added by me
         iteration = 0
-        d_operators_log = np.zeros(
+        destruction_counts = np.zeros(
             shape=(stop._max_iterations, len(self.destroy_operators) + 1),
             dtype=int,
         )
-        d_operators_log[0, :] = 0
-        r_operators_log = np.zeros(
+        destruction_counts[0, :] = 0
+        insertion_counts = np.zeros(
             shape=(stop._max_iterations, len(self.repair_operators) + 1),
             dtype=int,
         )
-        r_operators_log[0, :] = 0
+        insertion_counts[0, :] = 0
+
+        d_operator_log = []
+        r_operator_log = []
 
         # set up plot directory
         if save_plots:
@@ -240,35 +243,53 @@ class ALNS:
             id = datetime.now().strftime("%Y%m%d%H%M%S")
             plots_folder = f"{printdir}/{id}"
             os.makedirs(plots_folder)
-            print(f"Saving plots to folder {plots_folder}")
+            print(f"Saving plots to folder {os.path.abspath(plots_folder)}")
 
         while not stop(self._rng, best, curr):
+            logger.debug(
+                f"Before: current solution unassigned: {curr.unassigned}"
+            )
             d_idx, r_idx = op_select(self._rng, best, curr)
 
             d_name, d_operator = self.destroy_operators[d_idx]
             r_name, r_operator = self.repair_operators[r_idx]
 
             # logger.debug(
-            #     f"\nIteration {iteration}: Selected operators {d_name} and {r_name}."
+            #     f"Iteration {iteration}: destroy operators weights: {op_select.destroy_weights}."
             # )
+            # logging chosen operators
+            d_operator_log.append(d_idx)
+            r_operator_log.append(r_idx)
 
+            # calculating the number of customers removed and added and logging
             n_served_customers1 = curr.n_served_customers()
             destroyed = d_operator(curr, self._rng, **kwargs)
+            # DEBUG
+            # print(f"iteration: {iteration} - {destroyed}")
             n_served_customers2 = destroyed.n_served_customers()
             cand = r_operator(destroyed, self._rng, **kwargs)
             n_served_customers3 = cand.n_served_customers()
             # added by me
-            d_operators_log[iteration, d_idx] += (
+            destruction_counts[iteration, d_idx] += (
                 n_served_customers1 - n_served_customers2
             )
-            r_operators_log[iteration, r_idx] += (
+            insertion_counts[iteration, r_idx] += (
                 n_served_customers3 - n_served_customers2
             )
 
-            # logger.debug(f"Iteration {iteration}: Destroy operator {d_name} removed {n_served_customers1-n_served_customers2} customers.")
-            # logger.debug(
-            #     f"Iteration {iteration}: Repair operator {r_name} added {n_served_customers3 -n_served_customers2} customers.\n"
-            # )
+            logger.debug(
+                f"Iteration {iteration}: Destroy operator {d_name} removed {n_served_customers1-n_served_customers2} customers."
+            )
+            logger.debug(
+                f"Iteration {iteration}: Repair operator {r_name} added {n_served_customers3 -n_served_customers2} customers."
+            )
+
+            logger.debug(
+                f"Before _eval_cand: current solution unassigned: {curr.unassigned}"
+            )
+            logger.debug(
+                f"Before _eval_cand: candidate solution unassigned: {cand.unassigned}\n"
+            )
 
             best, curr, outcome = self._eval_cand(
                 accept,
@@ -280,8 +301,14 @@ class ALNS:
                 save=False,
                 **kwargs,
             )
-            d_operators_log[iteration, -1] = curr.cost
-            r_operators_log[iteration, -1] = curr.cost
+            destruction_counts[iteration, -1] = curr.cost
+            insertion_counts[iteration, -1] = curr.cost
+            logger.debug(
+                f"After _eval_cand: current solution unassigned: {curr.unassigned}"
+            )
+            logger.debug(
+                f"After _eval_cand: candidate solution unassigned: {cand.unassigned}\n"
+            )
 
             op_select.update(cand, d_idx, r_idx, outcome)
 
@@ -301,7 +328,13 @@ class ALNS:
 
         logger.info(f"Finished iterating in {stats.total_runtime:.2f}s.")
 
-        return Result(best, stats), d_operators_log, r_operators_log
+        return (
+            Result(best, stats),
+            destruction_counts,
+            insertion_counts,
+            np.array(d_operator_log),
+            np.array(r_operator_log),
+        )
 
     def on_best(self, func: _CallbackType):
         """
