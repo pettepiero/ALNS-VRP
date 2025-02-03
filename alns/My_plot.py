@@ -1,63 +1,70 @@
 import matplotlib.pyplot as plt
 
-
 def plot_solution(
-    data,
     solution,
     name="CVRP solution",
-    idx_annotations=True,
+    idx_annotations=False,
     figsize=(12, 10),
     save=False,
-    folder_name=None,
+    save_path="./outputs/plots",
+    cordeau: bool = True,
 ):
     """
-    Plot the routes of the passed-in solution.
-    """
-    fig, ax = plt.subplots(figsize=figsize)
-    cmap = plt.get_cmap("Set2", data["vehicles"])
-    cmap
+    Plot the routes of the passed-in solution. If cordeau is True, the first customer is ignored.
+        Parameters:
+            solution: CvrptwState
+                The solution to be plotted.
+            name: str
+                The name of the plot.
+            idx_annotations: bool
+                If True, the customer indices are plotted.
+            figsize: tuple
+                The size of the plot.
+            save: bool
+                If True, the plot is saved in "./plots".
+            cordeau: bool
+                If True, the first customer is ignored.
 
+    """
+    df = solution.nodes_df
+    start_idx = 1 if cordeau else 0
+    fig, ax = plt.subplots(figsize=figsize)
+    cmap = plt.get_cmap("Set2", len(solution.routes))
+    cmap
+    # Plot the routes
     for idx, route in enumerate(solution.routes):
         ax.plot(
-            [data["node_coord"][loc][0] for loc in route.customers_list],
-            [data["node_coord"][loc][1] for loc in route.customers_list],
+            [df.loc[loc, "x"].item() for loc in route.customers_list],
+            [df.loc[loc, "y"].item() for loc in route.customers_list],
             color=cmap(idx),
             marker=".",
-            label=f"Vehicle {idx}",
+            label=f"Vehicle {route.vehicle}",
         )
 
-    for i in range(1, data["dimension"]):
-        customer = data["node_coord"][i]
-        ax.plot(customer[0], customer[1], "o", c="tab:blue")
+    # Plot the customers
+    for i in range(start_idx, solution.n_customers + 1):
+        customer = df.loc[i, ["x", "y"]]
+        # customer = customer.values[0]
+        ax.plot(customer.iloc[0], customer.iloc[1], "o", c="tab:blue")
         if idx_annotations:
             ax.annotate(i, (customer[0], customer[1]))
-
-    # for idx, customer in enumerate(data["node_coord"][:data["dimension"]]):
-    #     ax.plot(customer[0], customer[1], "o", c="tab:blue")
-    #     ax.annotate(idx, (customer[0], customer[1]))
 
     # Plot the depot
     kwargs = dict(zorder=3, marker="X")
 
-    for i in range(data["dimension"], data["dimension"] + data["n_depots"]):
-        depot = data["node_coord"][i]
-        ax.plot(depot[0], depot[1], c="tab:red", **kwargs, label=f"Depot {i}")
+    for i, dep in enumerate(solution.depots["depots_indices"]):
+        coords = solution.depots["coords"][i]
+        ax.plot(coords[0], coords[1], c="tab:red", **kwargs, label=f"Depot {dep}")
         if idx_annotations:
-            ax.annotate(i, (depot[0], depot[1]))
-
-    # for idx, depot in enumerate(data["depots"]):
-    #     ax.scatter(*data["node_coord"][depot], label=f"Depot {depot}", c=cmap(idx), **kwargs)
-    #     ax.annotate(idx, (data["node_coord"][depot][0], data["node_coord"][depot][1]))
-
-    ax.scatter(*data["node_coord"][0], c="tab:red", label="Depot 0", **kwargs)
+            ax.annotate(dep, (coords[0], coords[1]))
 
     ax.set_title(
-        f"{name}\n Total distance: {solution.cost},\n Total unassigned: {len(solution.unassigned)}"
+        f"{name}\n Total distance: {solution.cost}\n Total unassigned: {len(solution.unassigned)}"
     )
     ax.set_xlabel("X-coordinate")
     ax.set_ylabel("Y-coordinate")
     ax.legend(frameon=False, ncol=3)
 
     if save:
-        plt.savefig(f"{folder_name}/{name}")
+        plt.savefig(f"{save_path}/{name}.png")
         plt.close()
