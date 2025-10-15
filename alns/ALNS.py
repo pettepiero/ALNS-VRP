@@ -212,12 +212,6 @@ class ALNS:
         if len(self.destroy_operators) == 0 or len(self.repair_operators) == 0:
             raise ValueError("Missing destroy or repair operators.")
 
-        assert isinstance(stop, MaxIterations), "Only MaxIterations is supported at the moment."
-        # NOTE: if you want a different stopping criterion, you need to change the code below
-        # to handle the progress bar (tqdm)
-
-        end = stop._max_iterations # for progress bar
-
         curr = best = initial_solution
         init_obj = initial_solution.objective()
 
@@ -228,16 +222,16 @@ class ALNS:
         stats.collect_runtime(time.perf_counter())
         # added by me
         iteration = 0
-        destruction_counts = np.zeros(
-            shape=(stop._max_iterations, len(self.destroy_operators) + 1),
-            dtype=int,
-        )
-        destruction_counts[0, :] = 0
-        insertion_counts = np.zeros(
-            shape=(stop._max_iterations, len(self.repair_operators) + 1),
-            dtype=int,
-        )
-        insertion_counts[0, :] = 0
+        #destruction_counts = np.zeros(
+        #    shape=(stop._max_iterations, len(self.destroy_operators) + 1),
+        #    dtype=int,
+        #)
+        #destruction_counts[0, :] = 0
+        #insertion_counts = np.zeros(
+        #    shape=(stop._max_iterations, len(self.repair_operators) + 1),
+        #    dtype=int,
+        #)
+        #insertion_counts[0, :] = 0
 
         d_operator_log = []
         r_operator_log = []
@@ -255,72 +249,60 @@ class ALNS:
                 print(f"Removed existing folder {os.path.abspath(plots_folder)}")
             os.makedirs(plots_folder)
             print(f"Saving plots to folder {os.path.abspath(plots_folder)}")
-        with tqdm.tqdm(total=end) as pbar: # progress bar
-            while not stop(self._rng, best, curr):
-                # bar makes sense only with MaxIterations
-                if iteration % 5 == 0:
-                    pbar.update(5)
+        while not stop(self._rng, best, curr):
+            logger.debug(f"\n")
+            logger.debug(f"Iteration: {iteration}")
+            d_idx, r_idx = op_select(self._rng, best, curr)
 
-                d_idx, r_idx = op_select(self._rng, best, curr)
+            d_name, d_operator = self.destroy_operators[d_idx]
+            r_name, r_operator = self.repair_operators[r_idx]
+            logger.debug(
+                f"Current unassigned list: {curr.unassigned}."
+            )
+            logger.debug(
+                f"destroy operator is {d_name}, repair operator is {r_name}."
+            )
+            # logging chosen operators
+            d_operator_log.append(d_idx)
+            r_operator_log.append(r_idx)
 
-                d_name, d_operator = self.destroy_operators[d_idx]
-                r_name, r_operator = self.repair_operators[r_idx]
-                logger.debug(
-                    f"\n\nCurrent unassigned list: {curr.unassigned}."
-                )
-                logger.debug(
-                    f"Iteration {iteration}: destroy operator is {d_name}, repair operator is {r_name}."
-                )
-                # logging chosen operators
-                d_operator_log.append(d_idx)
-                r_operator_log.append(r_idx)
+            # calculating the number of customers removed and added and logging
+            n_served_customers1 = curr.n_served_customers()
 
-                # calculating the number of customers removed and added and logging
-                n_served_customers1 = curr.n_served_customers()
+            logger.debug(f"Calling destroy operator {d_name}.")
+            destroyed = d_operator(curr, self._rng, **kwargs)
+            # DEBUG
+            logger.debug(f"Calling repair operator {r_name}.")
+            
+            n_served_customers2 = destroyed.n_served_customers()
+            cand = r_operator(destroyed, self._rng, **kwargs)
+            n_served_customers3 = cand.n_served_customers()
 
-                logger.debug(f"Calling destroy operator {d_name}.")
-                destroyed = d_operator(curr, self._rng, **kwargs)
-                # DEBUG
-                logger.debug(f"Calling repair operator {r_name}.")
-                
-                n_served_customers2 = destroyed.n_served_customers()
-                cand = r_operator(destroyed, self._rng, **kwargs)
-                n_served_customers3 = cand.n_served_customers()
-                # added by me
-                destruction_counts[iteration, d_idx] += (
-                    n_served_customers1 - n_served_customers2
-                )
-                insertion_counts[iteration, r_idx] += (
-                    n_served_customers3 - n_served_customers2
-                )
+            best, curr, outcome = self._eval_cand(
+                accept,
+                best,
+                curr,
+                cand,
+                data,
+                iteration,
+                save=False,
+                **kwargs,
+            )
+            op_select.update(cand, d_idx, r_idx, outcome)
 
-                best, curr, outcome = self._eval_cand(
-                    accept,
-                    best,
-                    curr,
-                    cand,
-                    data,
-                    iteration,
-                    save=False,
-                    **kwargs,
-                )
-                destruction_counts[iteration, -1] = curr.cost
-                insertion_counts[iteration, -1] = curr.cost
+            stats.collect_objective(curr.objective())
+            stats.collect_destroy_operator(d_name, outcome)
+            stats.collect_repair_operator(r_name, outcome)
+            stats.collect_runtime(time.perf_counter())
+            if save_plots:
+                plot_solution(curr, f"solution_{iteration:04d}.png", save=True, save_path=plots_folder)
+            iteration += 1
 
-                op_select.update(cand, d_idx, r_idx, outcome)
+        logger.info(f"Finished iterating in {stats.total_runtime:.2f}s.")
 
-                stats.collect_objective(curr.objective())
-                stats.collect_destroy_operator(d_name, outcome)
-                stats.collect_repair_operator(r_name, outcome)
-                stats.collect_runtime(time.perf_counter())
-                if save_plots:
-                    plot_solution(curr, f"solution_{iteration:04d}.png", save=True, save_path=plots_folder)
-                iteration += 1
-
-            pbar.close()
-            logger.info(f"Finished iterating in {stats.total_runtime:.2f}s.")
-
-            return Result(best, stats), destruction_counts, insertion_counts, np.array(d_operator_log), np.array(r_operator_log)
+            #return Result(best, stats), destruction_counts, insertion_counts, np.array(d_operator_log), np.array(r_operator_log)
+        logger.debug(f"Finished in {iteration} iterations and {stats.total_runtime:.2f}s")
+        return Result(best, stats), None, None, np.array(d_operator_log), np.array(r_operator_log)
 
     def on_best(self, func: _CallbackType):
         """
